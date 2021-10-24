@@ -25,7 +25,7 @@ const getUtilizationRate = async (
 };
 
 const provideHandleBlock = () => {
-  const utilizationRates: {
+  const ctokenStores: {
     [addr: string]: TimeRangeStore;
   } = {};
 
@@ -49,15 +49,17 @@ const provideHandleBlock = () => {
       const name: string = await ctoken.name({
         blockTag: blockEvent.blockNumber,
       });
+      if (!ctokenStores[ctoken.address])
+        ctokenStores[ctoken.address] = new TimeRangeStore();
       const currRate = await getUtilizationRate(ctoken);
-      const prevRate = utilizationRates[ctoken.address].update(
+      const prevRate = ctokenStores[ctoken.address].update(
         blockEvent.block.timestamp,
         currRate
       );
-      if (currRate.minus(prevRate).div(prevRate).gte(new BigNumber(0.1)))
+      if (prevRate.minus(currRate).div(prevRate).gte(new BigNumber(0.1)))
         findings.push(
           Finding.fromObject({
-            name: "cToken Exchange Rate went down",
+            name: "cToken Utilization Rate went down",
             description: `cToken ${name} Utilization Rate went down by more than 10%.`,
             alertId: "COMPOUND_CTOKEN_UTILIZATION_RATE",
             severity: FindingSeverity.Info,
