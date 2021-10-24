@@ -7,11 +7,12 @@ import {
   FindingSeverity,
   FindingType,
 } from "forta-agent";
+import { TimeRangeStore } from "./store";
 import {
+  CHANGE_FRAC,
   COMPTROLLER_ABI,
   COMPTROLLER_ADDR,
   CTOKEN_ABI,
-  TimeRangeStore,
 } from "./utils";
 
 const getUtilizationRate = async (
@@ -49,18 +50,29 @@ const provideHandleBlock = () => {
       const name: string = await ctoken.name({
         blockTag: blockEvent.blockNumber,
       });
-      if (!ctokenStores[ctoken.address])
-        ctokenStores[ctoken.address] = new TimeRangeStore();
+
       const currRate = await getUtilizationRate(ctoken);
-      const prevRate = ctokenStores[ctoken.address].update(
+
+      if (!ctokenStores[ctoken.address]) {
+        ctokenStores[ctoken.address] = new TimeRangeStore(
+          blockEvent.block.timestamp,
+          currRate
+        );
+        continue;
+      }
+
+      const [prevRateMin, prevRateMax] = ctokenStores[ctoken.address].update(
         blockEvent.block.timestamp,
         currRate
       );
-      if (prevRate.minus(currRate).div(prevRate).gte(new BigNumber(0.1)))
+      const rateDec = currRate.minus(prevRateMax).abs().div(prevRateMax);
+      const rateInc = currRate.minus(prevRateMin).abs().div(prevRateMin);
+      const rateChange = BigNumber.max(rateDec, rateInc);
+      if (rateChange.gte(CHANGE_FRAC))
         findings.push(
           Finding.fromObject({
-            name: "cToken Utilization Rate went down",
-            description: `cToken ${name} Utilization Rate went down by more than 10%.`,
+            name: "cToken Utilization Rate changed",
+            description: `cToken ${name} Utilization Rate changed by more than 10%.`,
             alertId: "COMPOUND_CTOKEN_UTILIZATION_RATE",
             severity: FindingSeverity.Info,
             type: FindingType.Info,
