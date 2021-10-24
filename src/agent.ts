@@ -16,11 +16,18 @@ import {
 } from "./utils";
 
 const getUtilizationRate = async (
-  ctoken: ethers.Contract
+  ctoken: ethers.Contract,
+  blockNumber: number
 ): Promise<BigNumber> => {
-  const cashString = (await ctoken.getCash()).toString();
+  const cashString = (
+    await ctoken.getCash({
+      blockTag: blockNumber,
+    })
+  ).toString();
   const cash = new BigNumber(cashString);
-  const borrowsString = (await ctoken.totalBorrowsCurrent()).toString();
+  const borrowsString = (
+    await ctoken.totalBorrowsCurrent({ blockTag: blockNumber })
+  ).toString();
   const borrows = new BigNumber(borrowsString);
   return borrows.div(cash);
 };
@@ -51,7 +58,7 @@ const provideHandleBlock = () => {
         blockTag: blockEvent.blockNumber,
       });
 
-      const currRate = await getUtilizationRate(ctoken);
+      const currRate = await getUtilizationRate(ctoken, blockEvent.blockNumber);
 
       if (!ctokenStores[ctoken.address]) {
         ctokenStores[ctoken.address] = new TimeRangeStore(
