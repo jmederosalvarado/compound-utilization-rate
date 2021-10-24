@@ -8,6 +8,7 @@ import {
   FindingType,
   HandleBlock,
 } from "forta-agent";
+import LRUCache from "lru-cache";
 import { TimeRangeStore } from "./store";
 import {
   CHANGE_FRAC,
@@ -17,10 +18,14 @@ import {
   TIME_WINDOW,
 } from "./utils";
 
+const utilizationRateCache = new LRUCache<number, BigNumber>();
 const getUtilizationRate = async (
   ctoken: ethers.Contract,
   blockNumber: number
 ): Promise<BigNumber> => {
+  const cached = utilizationRateCache.get(blockNumber);
+  if (cached) return cached;
+
   const cashString = (
     await ctoken.getCash({
       blockTag: blockNumber,
@@ -31,7 +36,10 @@ const getUtilizationRate = async (
     await ctoken.totalBorrowsCurrent({ blockTag: blockNumber })
   ).toString();
   const borrows = new BigNumber(borrowsString);
-  return borrows.div(cash);
+  const utilizationRate = borrows.div(cash);
+
+  utilizationRateCache.set(blockNumber, utilizationRate);
+  return utilizationRate;
 };
 
 // this method assumes that handleBlock is run sequentially on blocks, it's not documented wether or not this is the way that agents are run. According to https://github.dev/forta-protocol/forta-agent-sdk/blob/eec16a9b1b1be697dbf124e11b3602fca839a6e0/cli/commands/run/run.live.ts#L17-L34, they are run asyncroniously on blocks. See the next method for an alternative stateless implementation.
