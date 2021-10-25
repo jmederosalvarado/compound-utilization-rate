@@ -18,12 +18,13 @@ import {
   TIME_WINDOW,
 } from "./utils";
 
-const utilizationRateCache = new LRUCache<number, BigNumber>();
+const utilizationRateCache = new LRUCache<string, BigNumber>();
 const getUtilizationRate = async (
   ctoken: ethers.Contract,
   blockNumber: number
 ): Promise<BigNumber> => {
-  const cached = utilizationRateCache.get(blockNumber);
+  const cacheKey = `${ctoken.address}-${blockNumber}`;
+  const cached = utilizationRateCache.get(cacheKey);
   if (cached) return cached;
 
   const cashString = (
@@ -38,7 +39,7 @@ const getUtilizationRate = async (
   const borrows = new BigNumber(borrowsString);
   const utilizationRate = borrows.div(cash);
 
-  utilizationRateCache.set(blockNumber, utilizationRate);
+  utilizationRateCache.set(cacheKey, utilizationRate);
   return utilizationRate;
 };
 
@@ -124,8 +125,8 @@ const handleBlock: HandleBlock = async (blockEvent) => {
 
     const currRate = await getUtilizationRate(ctoken, blockEvent.blockNumber);
 
-    let block = await provider.getBlock(blockEvent.blockNumber);
-    while (blockEvent.block.timestamp - block.timestamp >= TIME_WINDOW) {
+    let block = await provider.getBlock(blockEvent.blockNumber - 1);
+    while (blockEvent.block.timestamp - block.timestamp <= TIME_WINDOW) {
       const prevRate = await getUtilizationRate(ctoken, block.number);
       if (currRate.minus(prevRate).abs().div(prevRate).gte(CHANGE_FRAC)) {
         findings.push(
